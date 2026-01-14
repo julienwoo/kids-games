@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>影子配对家 - 幼儿益智小游戏</title>
+    <!-- 引入五彩纸屑特效库 -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #fdfaf1;
+            --primary-color: #ff6b6b;
+            --secondary-color: #4ecdc4;
+            --text-color: #5d5d5d;
+        }
+
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            touch-action: none;
+        }
+
+        .header {
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        h1 {
+            color: var(--text-color);
+            font-size: 1.8rem;
+            margin: 0;
+            text-shadow: 2px 2px 0px white;
+        }
+
+        .instruction {
+            color: #888;
+            font-size: 1rem;
+            margin-top: 5px;
+        }
+
+        .game-area {
+            flex: 1;
+            display: flex;
+            width: 100%;
+            max-width: 600px;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px;
+            position: relative;
+        }
+
+        .column {
+            display: flex;
+            flex-direction: column;
+            gap: 25px;
+            z-index: 10;
+        }
+
+        /* 形状基础样式 */
+        .shape {
+            width: 85px;
+            height: 85px;
+            cursor: grab;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.2s;
+            position: relative;
+        }
+
+        .shape-inner {
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        /* 具体形状的 CSS 绘制 */
+        .circle { border-radius: 50%; background-color: #FF595E; box-shadow: 0 6px 0 #D14A4E; }
+        .square { border-radius: 12px; background-color: #1982C4; box-shadow: 0 6px 0 #14699E; }
+        .triangle {
+            width: 0; height: 0;
+            border-left: 42px solid transparent;
+            border-right: 42px solid transparent;
+            border-bottom: 85px solid #FFCA3A;
+            background: none !important;
+        }
+        .star {
+            background: #8AC926;
+            clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+            box-shadow: 0 6px 0 #6F9E1F;
+        }
+        .heart {
+            background-color: #FF92AD;
+            clip-path: path('M12,21.35L10.55,20.03C5.4,15.36 2,12.27 2,8.5C2,5.41 4.41,3 7.5,3C9.24,3 10.91,3.81 12,5.08C13.09,3.81 14.76,3 16.5,3C19.59,3 22,5.41 22,8.5C22,12.27 18.6,15.36 13.45,20.03L12,21.35Z');
+            transform: scale(3.5);
+            margin-top: -10px;
+        }
+
+        /* 影子样式 */
+        .target {
+            width: 100px;
+            height: 100px;
+            background-color: #e0e0e0;
+            border: 4px dashed #ccc;
+            border-radius: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        .shadow {
+            opacity: 0.3;
+            filter: grayscale(1) brightness(0);
+            transform: scale(0.85);
+        }
+
+        .dragging {
+            opacity: 0.8;
+            transform: scale(1.1);
+            z-index: 1000;
+            cursor: grabbing;
+        }
+
+        /* 获胜弹窗 */
+        #win-modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 40px;
+            border-radius: 30px;
+            text-align: center;
+            box-shadow: 0 10px 0 #ddd;
+        }
+
+        .btn {
+            background: var(--secondary-color);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 1.2rem;
+            border-radius: 50px;
+            margin-top: 20px;
+            cursor: pointer;
+            box-shadow: 0 5px 0 #3ba8a0;
+        }
+
+        .btn:active {
+            transform: translateY(3px);
+            box-shadow: 0 2px 0 #3ba8a0;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>影子配对家</h1>
+        <div class="instruction">把彩色的形状拉到它们的影子里</div>
+    </div>
+
+    <div class="game-area" id="game-area">
+        <!-- 形状起源列 -->
+        <div class="column" id="shapes-column">
+            <div class="shape circle" data-type="circle"></div>
+            <div class="shape triangle" data-type="triangle"></div>
+            <div class="shape star" data-type="star"></div>
+            <div class="shape square" data-type="square"></div>
+        </div>
+
+        <!-- 目标影子列 -->
+        <div class="column" id="targets-column">
+            <!-- 目标顺序会被 JS 打乱 -->
+        </div>
+    </div>
+
+    <div id="win-modal">
+        <div class="modal-content">
+            <h2 style="font-size: 2rem; color: #FF92AD;">🌟 太棒了！🌟</h2>
+            <p>你全都找对啦，真厉害！</p>
+            <button class="btn" onclick="resetGame()">再玩一次</button>
+        </div>
+    </div>
+
+    <script>
+        const types = ['circle', 'triangle', 'star', 'square'];
+        let matchedCount = 0;
+        let activeElement = null;
+        let offsetX, offsetY;
+        let startX, startY;
+
+        const gameArea = document.getElementById('game-area');
+        const winModal = document.getElementById('win-modal');
+
+        function initGame() {
+            matchedCount = 0;
+            const targetsColumn = document.getElementById('targets-column');
+            const shapesColumn = document.getElementById('shapes-column');
+            
+            targetsColumn.innerHTML = '';
+            shapesColumn.innerHTML = '';
+
+            // 打乱顺序
+            const shuffledTypes = [...types].sort(() => Math.random() - 0.5);
+            const shuffledShapes = [...types].sort(() => Math.random() - 0.5);
+
+            // 生成目标
+            shuffledTypes.forEach(type => {
+                const target = document.createElement('div');
+                target.className = 'target';
+                target.dataset.type = type;
+                
+                const shadow = document.createElement('div');
+                shadow.className = `shape ${type} shadow`;
+                target.appendChild(shadow);
+                targetsColumn.appendChild(target);
+            });
+
+            // 生成可拖拽形状
+            shuffledShapes.forEach(type => {
+                const shape = document.createElement('div');
+                shape.className = `shape ${type}`;
+                shape.dataset.type = type;
+                shapesColumn.appendChild(shape);
+
+                // 添加触摸和鼠标事件
+                shape.addEventListener('mousedown', startDrag);
+                shape.addEventListener('touchstart', startDrag, { passive: false });
+            });
+        }
+
+        function startDrag(e) {
+            if (activeElement) return;
+            e.preventDefault();
+            
+            activeElement = e.target;
+            const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+            const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+
+            const rect = activeElement.getBoundingClientRect();
+            startX = rect.left;
+            startY = rect.top;
+            offsetX = clientX - rect.left;
+            offsetY = clientY - rect.top;
+
+            activeElement.classList.add('dragging');
+            activeElement.style.position = 'fixed';
+            activeElement.style.left = `${rect.left}px`;
+            activeElement.style.top = `${rect.top}px`;
+
+            document.addEventListener('mousemove', drag);
+            document.addEventListener('touchmove', drag, { passive: false });
+            document.addEventListener('mouseup', endDrag);
+            document.addEventListener('touchend', endDrag);
+        }
+
+        function drag(e) {
+            if (!activeElement) return;
+            e.preventDefault();
+
+            const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+            const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+
+            activeElement.style.left = `${clientX - offsetX}px`;
+            activeElement.style.top = `${clientY - offsetY}px`;
+        }
+
+        function endDrag(e) {
+            if (!activeElement) return;
+
+            const clientX = e.type.includes('touch') ? e.changedTouches[0].clientX : e.clientX;
+            const clientY = e.type.includes('touch') ? e.changedTouches[0].clientY : e.clientY;
+
+            // 检查是否落在目标上
+            activeElement.style.pointerEvents = 'none';
+            const dropTarget = document.elementFromPoint(clientX, clientY);
+            activeElement.style.pointerEvents = 'auto';
+
+            const targetBox = dropTarget?.closest('.target');
+            
+            if (targetBox && targetBox.dataset.type === activeElement.dataset.type) {
+                // 配对成功
+                const shadow = targetBox.querySelector('.shadow');
+                shadow.classList.remove('shadow');
+                shadow.style.opacity = "1";
+                targetBox.style.borderColor = "var(--secondary-color)";
+                targetBox.style.backgroundColor = "#e8fdfa";
+                
+                activeElement.remove();
+                matchedCount++;
+
+                if (matchedCount === types.length) {
+                    showWin();
+                }
+            } else {
+                // 归位动画
+                activeElement.style.transition = 'all 0.3s ease';
+                activeElement.style.left = `${startX}px`;
+                activeElement.style.top = `${startY}px`;
+                setTimeout(() => {
+                    if (activeElement) {
+                        activeElement.style.transition = '';
+                        activeElement.style.position = 'static';
+                        activeElement.classList.remove('dragging');
+                    }
+                }, 300);
+            }
+
+            document.removeEventListener('mousemove', drag);
+            document.removeEventListener('touchmove', drag);
+            document.removeEventListener('mouseup', endDrag);
+            document.removeEventListener('touchend', endDrag);
+            activeElement = null;
+        }
+
+        function showWin() {
+            confetti({
+                particleCount: 150,
+                spread: 70,
+                origin: { y: 0.6 },
+                colors: ['#FF595E', '#FFCA3A', '#8AC926', '#1982C4', '#6A4C93']
+            });
+            setTimeout(() => {
+                winModal.style.display = 'flex';
+            }, 500);
+        }
+
+        function resetGame() {
+            winModal.style.display = 'none';
+            initGame();
+        }
+
+        // 启动游戏
+        window.onload = initGame;
+    </script>
+</body>
+</html>
